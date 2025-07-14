@@ -1,0 +1,104 @@
+#include<stdio.h>
+#include<string.h>
+int main(){
+    printf("Enter the data : ");
+    char data[100];
+    scanf("%s",data);
+    int n = strlen(data);
+    printf("\nLenght of data %d\n",n);
+    int count = 0;
+    int prep = 7-(n % 7);
+    printf("\nNo.of zero to be added %d\n",prep);
+    char preprocessed[107];
+    for(int i = 0;i < n+prep;i++){
+        if(i<prep){
+            preprocessed[i] = '0';
+        }
+        else{
+            preprocessed[i] = data[i-prep];
+        }
+    }
+    preprocessed[n+prep] = '\0';
+    printf("\nPreprocessed data %s\n",preprocessed);
+    printf("\nLenght of preprocessed data %d\n\n\t",strlen(preprocessed));
+    int c1 = 0;
+    int count1=0;
+    char lrc[100],vrc[100];
+    int lrc_i=0,vrc_i=0;
+    for(int i = 1; i <= strlen(preprocessed); i++){
+        if(preprocessed[i-1] == '1'){
+            count1++;
+        }
+        printf("%c",preprocessed[i-1]);
+        if(i % 7 == 0 && i != 1){
+            if(count1 % 2 == 0){
+                lrc[lrc_i++] = '0';
+            }
+            else{
+                lrc[lrc_i++] = '1';
+            }
+            printf("  %c\n\t",lrc[lrc_i-1]);
+            count1 = 0;
+        }
+    }
+    lrc[lrc_i]='\0';
+    count1 = 0;
+    for(int i=0;i<7;i++){
+        int temp = i;
+x:
+        if(temp<n+prep){
+            if(preprocessed[temp] == '1'){
+                count1++;
+            }
+            temp = temp + 7;
+            goto x;
+        }
+        else{
+            if(count1 % 2 == 0){
+                vrc[vrc_i++] = '0';
+            }
+            else{
+                vrc[vrc_i++] = '1';
+            }
+            count1 = 0;
+        }   
+    }
+    printf("\n\t%s\n",vrc);
+    printf("\n\n\nEnter the LRC from the receiver side : ");
+    char rlrc[100];
+    scanf("%s",rlrc);
+    printf("\nEnter the VRC from the receiver side : ");
+    char rvrc[100];
+    scanf("%s",rvrc);
+    int lrce = -1,vrce = -1;
+    int lrce_i = 0, vrce_i = 0;
+    for(int i = 0; i < strlen(rlrc); i++){
+        if(rlrc[i] != lrc[i]){
+            lrce = i;
+            break;
+        }
+    }
+    for(int i = 0; i < strlen(rvrc); i++){
+        if(rvrc[i] != vrc[i]){
+            vrce = i;
+            break;
+        }
+    }
+    printf("\n\nLRC at sender's device : %s\n",lrc);
+    printf("VRC at sender's device: %s\n",vrc);
+    printf("\n\nLRC at receiver's side: %s\n",rlrc);
+    printf("VRC at receiver's side %s\n",rvrc);
+    if(vrce >= 0 && lrce >= 0){
+        printf("\n\nThere is error at : \n");
+        printf("column : %d - row %d\n",vrce,lrce);
+    }
+    else if(vrce >= 0 && lrce == -1 || vrce == -1 && lrce >= 0){
+        printf("\n\nThere is error, but can't be located. \n");
+    }
+    else if(vrce == -1 && lrce == -1){
+        printf("\n\nThere is NO ERROR detected\n");
+    }
+    else{
+        printf("\n\n not possible \n");
+    }
+}        
