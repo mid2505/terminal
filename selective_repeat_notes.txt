@@ -1,0 +1,304 @@
+ALGORITHM: Selective Repeat Server (Receiver)
+INPUT: Data frames from client
+OUTPUT: ACKs and ordered delivery to application
+
+INITIALIZATION:
+    got_frame[0..TOTAL_FRAMES-1] = false
+    frame_buffer[0..TOTAL_FRAMES-1] = empty
+    next_expected = 0
+    
+CREATE_AND_SETUP_SERVER:
+    create socket
+    bind to PORT 8080
+    listen for connections
+    accept client connection
+
+MAIN_LOOP:
+    WHILE (next_expected < TOTAL_FRAMES):
+        
+        // Receive frame from client
+        receive packet from client
+        
+        IF (packet lost due to network simulation):
+            discard packet
+            CONTINUE
+        
+        // Process received frame
+        frame_num = packet.seq_num
+        data = packet.data
+        
+        IF (frame_num is valid AND not already received):
+            got_frame[frame_num] = true
+            frame_buffer[frame_num] = data
+            print "Got frame frame_num: data"
+            
+            // Try to deliver frames in order
+            WHILE (got_frame[next_expected] == true):
+                deliver frame_buffer[next_expected] to application
+                next_expected = next_expected + 1
+        
+        ELSE IF (frame already received):
+            print "Duplicate frame"
+        
+        // Send ACK back
+        send ACK(frame_num) to client
+        
+        // Show current status
+        display receiver state
+    
+    print "All frames received successfully"
+    close connections
+
+FUNCTION send_ack_back(client_socket, frame_num):
+    create ACK packet
+    packet.seq_num = frame_num
+    packet.data = "ACK"
+    send packet to client
+
+-----------------------------------------------------------------------
+
+ALGORITHM: Selective Repeat Client (Sender)
+INPUT: Messages to send
+OUTPUT: Reliable transmission of all frames
+
+INITIALIZATION:
+    msg_list = ["hi there", "hello world", "how are you", ...]
+    frame_acked[0..TOTAL_FRAMES-1] = false
+    send_time[0..TOTAL_FRAMES-1] = 0
+    window_start = 0
+    next_to_send = 0
+
+CREATE_AND_CONNECT:
+    create socket
+    connect to server at 127.0.0.1:8080
+    set receive timeout = 1 second
+
+MAIN_LOOP:
+    WHILE (window_start < TOTAL_FRAMES):
+        
+        // Send new frames within window
+        WHILE (window_has_space() == true):
+            transmit_frame(next_to_send)
+            next_to_send = next_to_send + 1
+            display window status
+        
+        // Check for incoming ACKs
+        try to receive ACK packet (with timeout)
+        
+        IF (ACK received):
+            ack_num = packet.seq_num
+            
+            IF (ack_num is within current window AND not already acked):
+                frame_acked[ack_num] = true
+                move_window()
+                display window status
+        
+        // Check for timeouts (every 2 seconds)
+        IF (time since last check >= 2 seconds):
+            check_for_timeouts()
+            update last check time
+        
+        sleep for 200ms
+    
+    print "All messages sent successfully"
+    close connection
+
+FUNCTION window_has_space():
+    RETURN (next_to_send < window_start + WINDOW_SIZE) AND 
+           (next_to_send < TOTAL_FRAMES)
+
+FUNCTION transmit_frame(frame_num):
+    create packet
+    packet.seq_num = frame_num
+    packet.data = msg_list[frame_num]
+    send packet to server
+    send_time[frame_num] = current_time
+    print "Sent frame frame_num: data"
+
+FUNCTION move_window():
+    WHILE (frame_acked[window_start] == true):
+        print "Moving window: window_start -> window_start+1"
+        window_start = window_start + 1
+
+FUNCTION check_for_timeouts():
+    current_time = get_current_time()
+    
+    FOR i = window_start TO next_to_send-1:
+        IF (frame_acked[i] == false AND 
+            current_time - send_time[i] >= TIMEOUT):
+            print "Timeout! Resending frame i"
+            transmit_frame(i)
+
+-----------------------------------------------------------------------
+
+SLIDING WINDOW MECHANISM : 
+
+Window = [window_start, window_start + WINDOW_SIZE - 1]
+
+Example with WINDOW_SIZE = 4:
+Initial: [0, 1, 2, 3]
+After ACK 0: [1, 2, 3, 4]
+After ACK 1: [2, 3, 4, 5]
+
+-----------------------------------------------------------------------
+
+Selective Repeat Logic:
+
+SERVER (Receiver):
+- Accept frames out of order
+- Buffer frames until in-order delivery possible
+- Send individual ACK for each frame
+
+CLIENT (Sender):
+- Maintain window of unACKed frames
+- Retransmit only timed-out frames
+- Slide window only when base frame is ACKed
+
+-----------------------------------------------------------------------
+
+State Variables:
+
+SERVER:
+- got_frame[]: tracks which frames received
+- next_expected: next frame needed for in-order delivery
+- frame_buffer[]: stores out-of-order frames
+
+CLIENT:
+- frame_acked[]: tracks which frames are acknowledged
+- window_start: base of sliding window
+- next_to_send: next frame to transmit
+- send_time[]: timestamp for timeout detection
+
+------------------------------------------------------------------------
+
+Timeout and Retransmission:
+
+FOR each unACKed frame in window:
+    IF (current_time - send_time[frame] >= TIMEOUT):
+        retransmit frame
+        update send_time[frame]
+
+------------------------------------------------------------------------
+
+CLIENT SENDS: Frame 0, Frame 1, Frame 2, Frame 3
+              ↓       ↓       ↓       ↓
+SERVER:      ACK     ACK    LOST    ACK
+             (0)     (1)     (X)     (3)
+
+Timeline:
+1. Server receives Frame 0 → sends ACK 0
+2. Server receives Frame 1 → sends ACK 1  
+3. Server receives Frame 2 → CONTINUE (no ACK sent)
+4. Server receives Frame 3 → sends ACK 3
+
+CLIENT PERSPECTIVE:
+- Gets ACK 0, ACK 1, ACK 3
+- Frame 2 never gets ACKed
+- After TIMEOUT (3 seconds), client retransmits Frame 2
+- Server receives retransmitted Frame 2 → sends ACK 2
+
+=========================================================================
+
+DETAILED EXAMPLE: 
+
+Let's trace through a scenario where frames arrive out of order:
+
+Initial State:
+
+got_frame = [false, false, false, false, false, false, false, false]
+next_expected = 0  (we need frame 0 first)
+
+------------------------------------------------------------------------
+
+Frame Arrivals and Processing:
+
+//Step 1: Frame 0 arrives
+
+Received frame 0: "hi there"
+
+// Store the frame
+got_frame[0] = true
+frame_buffer[0] = "hi there"
+
+// Try to deliver in order
+WHILE (got_frame[0] == true):  // true, so enter loop
+    deliver "hi there" to application  ← DELIVERED
+    next_expected = 1  // now we need frame 1
+
+WHILE (got_frame[1] == true):  // false, so exit loop
+
+Result: Frame 0 delivered immediately
+------------------------------------------------------------------------
+
+//Step 2: Frame 2 arrives (out of order!)
+
+Received frame 2: "how are you"
+
+// Store the frame
+got_frame[2] = true
+frame_buffer[2] = "how are you"
+
+// Try to deliver in order
+WHILE (got_frame[1] == true):  // false! Frame 1 missing
+    // Loop doesn't execute
+
+Result: Frame 2 stored but NOT delivered (waiting for frame 1)
+------------------------------------------------------------------------
+
+//Step 3: Frame 3 arrives (still out of order!)
+
+Received frame 3: "good morning"
+
+// Store the frame
+got_frame[3] = true
+frame_buffer[3] = "good morning"
+
+// Try to deliver in order
+WHILE (got_frame[1] == true):  // still false! Frame 1 missing
+    // Loop doesn't execute
+
+Result: Frame 3 stored but NOT delivered (still waiting for frame 1)
+------------------------------------------------------------------------
+
+//Step 4: Frame 1 finally arrives!
+
+Received frame 1: "hello world"
+
+// Store the frame
+got_frame[1] = true
+frame_buffer[1] = "hello world"
+
+// Try to deliver in order
+WHILE (got_frame[1] == true):  // true! Enter loop
+    deliver "hello world" to application  ← DELIVERED
+    next_expected = 2
+
+WHILE (got_frame[2] == true):  // true! Continue loop
+    deliver "how are you" to application  ← DELIVERED
+    next_expected = 3
+
+WHILE (got_frame[3] == true):  // true! Continue loop
+    deliver "good morning" to application  ← DELIVERED
+    next_expected = 4
+
+WHILE (got_frame[4] == true):  // false, exit loop
+
+Result: Frames 1, 2, 3 all delivered in correct order!
+
+=========================================================================
+
+Visual Representation : 
+
+Arrival Order:    0 → 2 → 3 → 1
+                  ↓   ↓   ↓   ↓
+Buffer Status:   [0] [?] [2] [3] [?] [?] [?] [?]
+                  ↓       ↓   ↓
+Delivery:        ✅      📦  📦  (waiting for frame 1) (box means, buffer)
+
+When frame 1 arrives:
+Buffer Status:   [0] [1] [2] [3] [?] [?] [?] [?]
+                  ↓   ↓   ↓   ↓
+Delivery:        ✅  ✅  ✅  ✅  (all delivered in order!)
+
+=========================================================================
+
